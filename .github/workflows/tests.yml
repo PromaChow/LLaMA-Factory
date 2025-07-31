@@ -1,99 +1,144 @@
 name: tests
-
 on:
-  workflow_dispatch:
   push:
     branches:
-      - "main"
-    paths:
-      - "**/*.py"
-      - "requirements.txt"
-      - ".github/workflows/*.yml"
-  pull_request:
-    branches:
-      - "main"
-    paths:
-      - "**/*.py"
-      - "requirements.txt"
-      - ".github/workflows/*.yml"
+      - main
 
 jobs:
   tests:
-    strategy:
-      fail-fast: false
-      matrix:
-        python:
-          - "3.9"
-          - "3.10"
-          - "3.11"
-          - "3.12"
-        os:
-          - "ubuntu-latest"
-          - "windows-latest"
-          - "macos-13"
-        transformers:
-          - null
-        include:  # test backward compatibility
-          - python: "3.9"
-            os: "ubuntu-latest"
-            transformers: "4.49.0"
-          - python: "3.9"
-            os: "ubuntu-latest"
-            transformers: "4.51.0"
-
-    runs-on: ${{ matrix.os }}
-
     concurrency:
-      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.os }}-${{ matrix.python }}-${{ matrix.transformers }}
       cancel-in-progress: ${{ github.ref != 'refs/heads/main' }}
-
+      group: ${{ github.workflow }}-${{ github.ref }}-${{ matrix.os }}-${{ matrix.python
+        }}-${{ matrix.transformers }}
     env:
       HF_TOKEN: ${{ secrets.HF_TOKEN }}
       OS_NAME: ${{ matrix.os }}
-
+    runs-on: ${{ matrix.os }}
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          task: start-measurement
       - name: Checkout
         uses: actions/checkout@v4
-
       - name: Set up Python
         uses: actions/setup-python@v5
         with:
+          cache: pip
+          cache-dependency-path: '**/requirements*.txt'
           python-version: ${{ matrix.python }}
-          cache: "pip"
-          cache-dependency-path: "**/requirements*.txt"
-
       - name: Install dependencies
-        run: |
-          python -m pip install --upgrade pip
+        run: 'python -m pip install --upgrade pip
+
           python -m pip install ".[torch,dev]"
 
-      - name: Install transformers
-        if: ${{ matrix.transformers }}
-        run: |
-          python -m pip install "transformers==${{ matrix.transformers }}"
+          '
+      - id: measurement-4
+        name: Record Measurement After Install dependencies
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Install dependencies
+          task: get-measurement
+      - if: ${{ matrix.transformers }}
+        name: Install transformers
+        run: 'python -m pip install "transformers==${{ matrix.transformers }}"
 
-      - name: Cache files
-        id: hf-hub-cache
+          '
+      - id: measurement-6
+        name: Record Measurement After Install transformers
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Install transformers
+          task: get-measurement
+      - id: hf-hub-cache
+        name: Cache files
         uses: actions/cache@v4
         with:
+          key: huggingface-${{ matrix.os }}-${{ matrix.python }}-${{ matrix.transformers
+            }}-${{ hashFiles('tests/version.txt') }}
           path: ${{ runner.temp }}/huggingface
-          key: huggingface-${{ matrix.os }}-${{ matrix.python }}-${{ matrix.transformers }}-${{ hashFiles('tests/version.txt') }}
-
       - name: Check quality
-        run: |
-          make style && make quality
+        run: 'make style && make quality
 
+          '
+      - id: measurement-9
+        name: Record Measurement After Check quality
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Check quality
+          task: get-measurement
       - name: Check license
-        run: |
-          make license
+        run: 'make license
 
+          '
+      - id: measurement-11
+        name: Record Measurement After Check license
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Check license
+          task: get-measurement
       - name: Check build
-        run: |
-          make build
+        run: 'make build
 
-      - name: Test with pytest
-        run: |
-          make test
-        env:
+          '
+      - id: measurement-13
+        name: Record Measurement After Check build
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Check build
+          task: get-measurement
+      - env:
           HF_HOME: ${{ runner.temp }}/huggingface
-          HF_HUB_OFFLINE: "${{ steps.hf-hub-cache.outputs.cache-hit == 'true' && '1' || '0' }}"
+          HF_HUB_OFFLINE: ${{ steps.hf-hub-cache.outputs.cache-hit == 'true' && '1'
+            || '0' }}
+        name: Test with pytest
+        run: 'make test
+
+          '
+      - id: measurement-15
+        name: Record Measurement After Test with pytest
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Test with pytest
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption
+          path: total_energy_consumption.json
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: ubuntu-latest
+            python: '3.9'
+            transformers: 4.49.0
+          - os: ubuntu-latest
+            python: '3.9'
+            transformers: 4.51.0
+        os:
+          - ubuntu-latest
+          - windows-latest
+          - macos-13
+        python:
+          - '3.9'
+          - '3.10'
+          - '3.11'
+          - '3.12'
+        transformers:
+          - null

@@ -1,32 +1,47 @@
 name: label_issue
-
 on:
-  issues:
-    types:
-      - opened
+  push:
+    branches:
+      - main
 
 jobs:
   label_issue:
-    runs-on: ubuntu-latest
-
     permissions:
       issues: write
-
+    runs-on: ubuntu-latest
     steps:
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          task: start-measurement
       - env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          ISSUE_URL: ${{ github.event.issue.html_url }}
           ISSUE_TITLE: ${{ github.event.issue.title }}
-        run: |
-          LABEL=""
-          NPU_KEYWORDS=(npu huawei ascend 华为 昇腾 910)
-          ISSUE_TITLE_LOWER=$(echo $ISSUE_TITLE | tr '[:upper:]' '[:lower:]')
-          for KEYWORD in ${NPU_KEYWORDS[@]}; do
-            if [[ $ISSUE_TITLE_LOWER == *$KEYWORD* ]] && [[ $ISSUE_TITLE_LOWER != *input* ]]; then
-              LABEL="npu"
-              break
-            fi
-          done
-          if [ -n "$LABEL" ]; then
-            gh issue edit $ISSUE_URL --add-label $LABEL
-          fi
+          ISSUE_URL: ${{ github.event.issue.html_url }}
+        run: "LABEL=\"\"\nNPU_KEYWORDS=(npu huawei ascend \u534E\u4E3A \u6607\u817E\
+          \ 910)\nISSUE_TITLE_LOWER=$(echo $ISSUE_TITLE | tr '[:upper:]' '[:lower:]')\n\
+          for KEYWORD in ${NPU_KEYWORDS[@]}; do\n  if [[ $ISSUE_TITLE_LOWER == *$KEYWORD*\
+          \ ]] && [[ $ISSUE_TITLE_LOWER != *input* ]]; then\n    LABEL=\"npu\"\n \
+          \   break\n  fi\ndone\nif [ -n \"$LABEL\" ]; then\n  gh issue edit $ISSUE_URL\
+          \ --add-label $LABEL\nfi\n"
+      - id: measurement-2
+        name: Record Measurement After Step
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          label: Step
+          task: get-measurement
+      - id: display-measurement
+        name: Display Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
+        with:
+          json-output: true
+          task: display-results
+      - name: Save Total Energy Consumption Data
+        run: echo '${{ steps.final-measurement.outputs.data-total-json }}' > total_energy_consumption.json
+      - name: Upload Energy Consumption Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-energy-consumption
+          path: total_energy_consumption.json
